@@ -1,6 +1,7 @@
 from matplotlib.patches import Polygon
 from matplotlib.collections import PatchCollection
 from matplotlib.patches import Ellipse
+import numpy as np
 
 from sklearn.cluster import KMeans
 class GMM():
