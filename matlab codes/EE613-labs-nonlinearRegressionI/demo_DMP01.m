@@ -56,6 +56,7 @@ sIn(1) = 1; %Initialization of decay term
 for t=2:nbData
 	sIn(t) = sIn(t-1) - model.alpha * sIn(t-1) * model.dt; %Update of decay term (ds/dt=-alpha s)
 end
+
 xTar = demos{1}.pos(:,end);
 Data=[];
 DataDMP=[];

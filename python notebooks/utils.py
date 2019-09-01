@@ -242,3 +242,18 @@ def plot_GMM(mus, sigmas, ax, colors = None, alphas = None, labels = None):
     for i in range(n):
         plot_gaussian_2D(mus[i], sigmas[i], ax)
     return
+
+import matplotlib.pyplot as plt 
+
+def plot_with_covs_1D(x, y, cov, ax):
+    y_low = y - 2*np.sqrt(cov)
+    y_up = y + 2*np.sqrt(cov)
+    y_up = y_up[::-1]
+    
+    x_1 = np.concatenate([x, x[::-1]])
+    y_1 = np.concatenate([y_low, y_up])
+    xy = np.vstack([x_1,y_1]).T
+    poly = Polygon(xy,alpha=0.4)
+    ax.add_patch(poly)
+    
+    plt.plot(x,y,'-r')
