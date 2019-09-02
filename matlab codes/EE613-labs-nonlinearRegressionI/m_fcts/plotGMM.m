@@ -51,6 +51,8 @@ end
 
 h = [];
 X = zeros(2,nbDrawingSeg,nbStates);
+
+
 for i=1:nbStates
 	[V,D] = eig(Sigma(:,:,i));
 	R = real(V*D.^.5);
@@ -62,9 +64,13 @@ for i=1:nbStates
 		h = [h plot(Mu(1,:), Mu(2,:), '.', 'markersize', 6, 'color', darkcolor)];
 	else %Plot without transparency
 		%Standard plot
-		h = [h patch(X(1,:,i), X(2,:,i), color, 'lineWidth', 1, 'EdgeColor', darkcolor)];
+		h = [h patch(X(1,:,i), X(2,:,i), color, 'lineWidth', 4, 'EdgeColor', darkcolor)];
 		h = [h plot(Mu(1,:), Mu(2,:), '.', 'markersize', 6, 'color', darkcolor)];
 % 		%Plot only contours
 % 		h = [h plot(X(1,:,i), X(2,:,i), '-', 'color', color, 'lineWidth', 1)];
 	end
 end
+
+
+
+

@@ -67,8 +67,8 @@ for n=1:nbSamples
 	s(n).Data = [s(n).Data; gradient(s(n).Data(end-model.nbVarPos+1:end,:))/model.dt]; %Acceleration computation
 	Data = [Data s(n).Data]; %Concatenation of the multiple demonstrations
 	%Nonlinear forcing term
-	DataDMP = [DataDMP, (s(n).Data(accId,:) - ...
-		(repmat(xTar,1,nbData)-s(n).Data(posId,:))*model.kP + s(n).Data(velId,:)*model.kV) ./ repmat(sIn,model.nbVarPos,1)];
+  size(DataDMP)
+	DataDMP = [DataDMP, (s(n).Data(accId,:) - (repmat(xTar,1,nbData)-s(n).Data(posId,:))*model.kP + s(n).Data(velId,:)*model.kV) ./ repmat(sIn,model.nbVarPos,1)];
 end
 
 

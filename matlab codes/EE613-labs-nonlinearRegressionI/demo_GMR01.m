@@ -56,8 +56,8 @@ end
 
 %% Learning and reproduction
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%model = init_GMM_kmeans(Data, model);
-model = init_GMM_timeBased(Data, model);
+model = init_GMM_kmeans(Data, model);
+%model = init_GMM_timeBased(Data, model);
 model = EM_GMM(Data, model);
 [DataOut, SigmaOut] = GMR(model, DataIn, 1, 2:model.nbVar); 
 
