@@ -4,120 +4,93 @@ from matplotlib.patches import Ellipse
 import numpy as np
 
 from sklearn.cluster import KMeans
+from scipy.stats import multivariate_normal as mvn
 class GMM():
-    def __init__(self, n_comp = 10, D = 1, K = 2, weight_concentration = 0.1):
-        self.n_comp = n_comp
-        self.D = D
-        self.K = K
-
-        #pi params
-        self.alpha0 = np.ones(K)*weight_concentration
-        self.alpha = np.copy(self.alpha0)
-
-        #mu and sigma params
-        self.betha0 = 0.0001
-        self.betha = np.ones(self.K)
-        self.mu0 = np.zeros(self.D)
-        self.v0 = self.D
-        self.W0 = np.eye(self.D)/(self.v0)
-        #
-        self.W = [np.eye(self.D) for i in range(self.K)]
-        self.v = np.ones(self.K)*self.D
+    def __init__(self, D = 1, K = 2):
+        self.D = D #number of dimensions
+        self.K = K #number of mixture components
+        self.L = -np.inf #total log likelihood
+        self.weights_ = np.ones(K)/K
+        self.means_ = np.random.rand(K,D)
+        self.covariances_ = np.array([np.eye(D) for i in range(K)])
         
-        self.reg_covar = 1e-06
+    def init_kmeans(self):
+        kMM = KMeans(n_clusters=self.K).fit(self.x)
+        self.means_ = kMM.cluster_centers_
+        for i in range(self.K):
+            self.covariances_[i] = np.cov(self.x[kMM.labels_==i].T)
         
-    def fit(self,x, num_iter = 10,restart=True, stochastic=True, batch_size = 2000):
+    def init_random(self):
+        self.means_ = self.x[np.random.choice(len(self.x),size = self.K)]
+        for i in range(self.K):
+            self.covariances_[i] = np.cov(self.x.T)
+
+    def fit(self,x, max_iter = 10, init_type = 'kmeans', threshold = 1e-4, n_init = 5):
         self.x = x
-        self.stochastic = stochastic
-        self.batch_size = batch_size
-        cov = np.cov(x.T)
-        if restart:
-            kMM = KMeans(n_clusters=self.K).fit(x)
-            self.mu = kMM.cluster_centers_
-            #self.mu = x[np.random.choice(len(x),size = self.K)]
-        for i in range(num_iter):
-            print 'Iteration ' + str(i)
-            self.expectation()
-            #print self.ro, self.xks, self.Nks
-            self.maximization()
-            #print self.betha, self.v, self.W
-            
-        self.sigma = []
-        for k in range(self.K):
-            sigma = np.linalg.inv(self.v[k]*self.W[k])
-            self.sigma.append(sigma)
-
-        self.weights = self.alpha/np.sum(self.alpha)
-
-
-    def expectation(self):
-        if self.stochastic:
-            indexes = np.arange(0, len(self.x),1)
-            np.random.shuffle(indexes)
-            indexes = indexes[0:self.batch_size]
-            data = self.x[indexes]
-            N = self.batch_size
-        else:
-            data = self.x
-            N = data.shape[0]
-            
-        self.ln_ro = np.zeros([N,self.K])
-        self.ro = np.zeros([N,self.K])
+        self.N = len(self.x) #number of datapoints
+        self.threshold = threshold
         
-        print 'Calculating ro'
-        tic = time.time()
-        for k in range(self.K):
-            E_s = self.D*np.log(2) + np.log(np.linalg.det(self.W[k])) + np.sum([digamma((self.v[k] + 1 - i)/2.) \
-                                                                           for i in range(self.D)])
-            E_pi = digamma(self.alpha[k]) - digamma(np.sum(self.alpha))
-            E_2 = self.D*np.log(2*np.pi)
-            for n in range(data.shape[0]):
-                E_ms = self.D/self.betha[k] + self.v[k]*np.dot(data[n] - self.mu[k], np.dot(self.W[k], \
-                                                                                data[n] - self.mu[k]))
-                self.ln_ro[n,k] = E_pi + 0.5*E_s - 0.5*E_2 - 0.5*E_ms
+        best_params = ()
+        Lmax = -np.inf
+        for it in range(n_init):
+            if init_type == 'kmeans':
+                self.init_kmeans()
+            elif init_type == 'random':
+                self.init_random()
 
-        for n in range(N):        
-            self.ln_ro[n,:] = log_normalize(self.ln_ro[n,:])
-            self.ro[n,:] = np.exp(self.ln_ro[n,:])
-        toc = time.time()
-        print toc-tic
+            for i in range(max_iter):
+                print 'Iteration ' + str(i)
+                self.expectation()
+                self.maximization()
+                print self.L
+                if np.abs(self.prev_L-self.L) < self.threshold:
+                    break
+                    
+            if self.L > Lmax:
+                Lmax = self.L
+                best_params = (self.L, self.weights_.copy(), self.means_.copy(), self.covariances_.copy(), self.zs.copy(), self.Ns.copy())
+            
+        #return the best result
+        self.L = Lmax
+        self.weights_ = best_params[1]
+        self.means_ = best_params[2]
+        self.covariances_ = best_params[3]
+        self.zs = best_params[4]
+        self.Ns = best_params[5]
+        print 'Obtain best result with Log Likelihood: ' + str(self.L)
+        
+    def expectation(self):
+        self.Ls = np.zeros((self.N,self.K)) #posterior probability of z
+        self.zs = np.zeros((self.N,self.K)) #posterior probability of z
+        
+        for i in range(self.N):
+            for k in range(self.K):
+                self.Ls[i,k] = self.weights_[k]*mvn.pdf(self.x[i,:],mean = self.means_[k], cov=self.covariances_[k])
 
-
-        self.Nks = np.array([1e-6 + np.sum(self.ro[:,k]) for k in range(self.K)])
-
-        self.xks = np.dot(self.ro.T, data)
-        for k in range(self.K):
-            self.xks[k,:] /= self.Nks[k]
-
-
-        print 'Calculating Sk' 
-        self.Sks = []
-        for k in range(self.K):
-            Sk = np.zeros([self.D,self.D])
-            for n in range(N):
-                Sk += self.ro[n,k]*np.outer(data[n]-self.xks[k], data[n]-self.xks[k])
-            Sk /= self.Nks[k]
-            self.Sks.append(Sk)
-
-        toc = time.time()
-        print toc-tic
-
+            self.zs[i,:] = self.Ls[i,:]/np.sum(self.Ls[i,:]) #normalize
+        
+        self.prev_L = self.L
+        self.L = np.sum(np.log(np.sum(self.Ls, axis=1)))/self.N
+        self.Ns = np.sum(self.zs,axis=0)
              
     def maximization(self):
-        self.alpha = self.alpha0 + self.Nks
-        self.betha = self.betha0 + self.Nks
-
         for k in range(self.K):
-            self.mu[k] = (self.betha0*self.mu0 + self.Nks[k]*self.xks[k])/self.betha[k]
-            Wk_inv = np.linalg.inv(self.W0 + self.reg_covar*np.eye(self.D)) + self.Nks[k]*self.Sks[k] + np.outer(self.xks[k]-self.mu0, \
-                                    self.xks[k]-self.mu0)*self.betha0*self.Nks[k]/(self.betha0+self.Nks[k])
-            self.W[k] = np.linalg.inv(Wk_inv+ self.reg_covar*np.eye(self.D))
-            self.v[k] = self.v0 + self.Nks[k]
+            #update weight
+            self.weights_[k] = self.Ns[k]/self.N 
+
+            #update mean
+            self.means_[k,:] = np.dot(self.zs[:,k].T, self.x)/self.Ns[k]
             
+            #update covariance
+            sigma_k = np.zeros((self.D,self.D))
+            for i in range(self.N):
+                sigma_k += self.zs[i,k]*np.outer(self.x[i,:]-self.means_[k,:], self.x[i,:].T-self.means_[k,:].T)
+            sigma_k /= self.Ns[k]
+            self.covariances_[k,:] = sigma_k        
+        
     def plot(self):
         fig,ax = plt.subplots()
-        plot_gaussian(self.mu, self.sigma, ax, self.weights )
-
+        plot_GMM(self.means_, self.covariances_, ax)
         
 from scipy.stats import multivariate_normal as mvn
 class GMR():
