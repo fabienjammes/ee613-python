@@ -5,6 +5,14 @@ import numpy as np
 
 from sklearn.cluster import KMeans
 from scipy.stats import multivariate_normal as mvn
+
+from numpy import dot
+from numpy.linalg import inv
+from numpy.linalg import pinv
+
+import time
+from scipy.stats import multivariate_normal as mvn
+
 class GMM():
     def __init__(self, D = 1, K = 2,  reg_factor = 1e-6):
         self.D = D #number of dimensions
@@ -83,19 +91,96 @@ class GMM():
             self.means_[k,:] = np.dot(self.zs[:,k].T, self.x)/self.Ns[k]
             
             #update covariance
-            sigma_k = np.zeros((self.D,self.D))
-            for i in range(self.N):
-                sigma_k += self.zs[i,k]*np.outer(self.x[i,:]-self.means_[k,:], self.x[i,:].T-self.means_[k,:].T)
-            sigma_k /= self.Ns[k]
+            x_reduce_mean = self.x-self.means_[k,:]
+            #S_k = dot(x_reduce_mean.T, dot(np.diag(self.zs[:,k]), x_reduce_mean))
+            sigma_k = dot(np.multiply(x_reduce_mean.T, self.zs[:,k][None,:]), x_reduce_mean)/self.Ns[k] + np.eye(self.D)*self.reg_factor
+            
             self.covariances_[k,:] = sigma_k        
         
     def plot(self):
         fig,ax = plt.subplots()
         plot_GMM(self.means_, self.covariances_, ax)
         
+
+class HDGMM(GMM):
+    def __init__(self, D = 1, K = 2,  reg_factor = 1e-6, n_fac = 1):
+        self.D = D #number of dimensions
+        self.K = K #number of mixture components
+        self.L = -np.inf #total log likelihood
+        self.weights_ = np.ones(K)/K
+        self.means_ = np.random.rand(K,D)
+        self.covariances_ = np.array([np.eye(D) for i in range(K)])
+        self.reg_factor =  reg_factor 
+        self.n_fac = n_fac
+             
+    def maximization(self):
+        for k in range(self.K):
+            #update weight
+            self.weights_[k] = self.Ns[k]/self.N 
+
+            #update mean
+            self.means_[k,:] = np.dot(self.zs[:,k].T, self.x)/self.Ns[k]
+            
+            #update covariance
+            x_reduce_mean = self.x-self.means_[k,:]
+            sigma_k = dot(np.multiply(x_reduce_mean.T, self.zs[:,k][None,:]), x_reduce_mean)/self.Ns[k] + np.eye(self.D)*self.reg_factor
+            
+            #modify the covariance by replacing the last (D-n_fac) eigen values by their average
+            D,V = np.linalg.eig(sigma_k)
+            sort_indexes = np.argsort(D)[::-1]
+            D = np.concatenate([D[sort_indexes[:self.n_fac]], [np.mean(D[sort_indexes[self.n_fac:]])]*(self.D-self.n_fac)])
+            V = V[:,sort_indexes]
+            self.covariances_[k,:] = dot(V, dot(np.diag(D), V.T))+ np.eye(self.D)*self.reg_factor       
+            
+class semitiedGMM(GMM):
+    def __init__(self, D = 1, K = 2,  reg_factor = 1e-6, bsf_param =  5E-2, n_step_variation = 50):
+        self.D = D #number of dimensions
+        self.K = K #number of mixture components
+        self.L = -np.inf #total log likelihood
+        self.weights_ = np.ones(K)/K
+        self.means_ = np.random.rand(K,D)
+        self.covariances_ = np.array([np.eye(D) for i in range(K)])
+        self.reg_factor =  reg_factor 
+        self.bsf_param = bsf_param
+        self.n_step_variation = n_step_variation
+        self.B = np.eye(self.D)*self.bsf_param
+        self.S = np.array([np.eye(D) for i in range(K)])
+        self.Sigma_diag = np.array([np.eye(D) for i in range(K)])
+        #def init_semitiedGMM(self):
+        #self.H_init = pinv(self.B) + np.eye(self.D)*self.reg_factor
+        #self.Sigma_diag_init = np.array([np.eye(self.D) for i in range(K)])
+        #for i in range(self.K):
+        #    eig_vals, V = np.linalg.eig(self.covariances_[i])
+        #    self.Sigma_diag_init[i] = np.diag(eig_vals)
+            
+    def maximization(self):
+        for k in range(self.K):
+            #update weight
+            self.weights_[k] = self.Ns[k]/self.N 
+
+            #update mean
+            self.means_[k,:] = np.dot(self.zs[:,k].T, self.x)/self.Ns[k]
+            
+            #calculate the sample covariances
+            x_reduce_mean = self.x-self.means_[k,:]
+            self.S[k] = dot(np.multiply(x_reduce_mean.T, self.zs[:,k][None,:]), x_reduce_mean)/self.Ns[k] + np.eye(self.D)*self.reg_factor
+            
+        #calculate H and the covariance
+        for it in range(self.n_step_variation):
+            for k in range(self.K):
+                self.Sigma_diag[k] = np.diag(np.diag(dot(self.B, dot(self.S[k], self.B.T))))
+                
+            for i in range(self.D):
+                C = pinv(self.B.T)*np.linalg.det(self.B)
+                G = np.zeros((self.D,self.D))
+                for k in range(self.K):
+                    G += dot(self.S[k], np.sum(self.zs[:,k]))/self.Sigma_diag[k, i, i]
+                self.B[i] = dot(C[i],pinv(G))*np.sqrt(np.sum(self.zs)/dot(C[i], dot(pinv(G), C[i].T)))
+        self.H = pinv(self.B) + np.eye(self.D)*self.reg_factor
+        for k in range(self.K):
+            self.covariances_[k,:] = dot(self.H, dot(self.Sigma_diag[k], self.H.T))   
         
-from numpy import dot
-from numpy.linalg import inv
+        
 class MFA(GMM):
     def __init__(self, D = 1, K = 2, n_fac = 1, reg_factor = 1e-6):
         self.D = D #number of dimensions
@@ -117,7 +202,7 @@ class MFA(GMM):
             self.Psi_[k] = np.diag(np.diag(self.covariances_[k]))
             D,V = np.linalg.eig(self.covariances_[k] - self.Psi_[k])
             indexes = np.argsort(D)[::-1]
-            V = dot(V[:,indexes], np.diag(np.sqrt(D[indexes])))
+            V = dot(V[:,indexes], np.diag(np.lib.scimath.sqrt(D[indexes])))
             self.Lambda_[k] = V[:,:self.n_fac]
             
             B_k = dot(self.Lambda_[k].T, inv(dot(self.Lambda_[k],self.Lambda_[k].T)+self.Psi_[k]))
@@ -192,9 +277,9 @@ class MFA(GMM):
     def maximization_2(self):
         #update covariance
         for k in range(self.K):
-            S_k = dot((self.x-self.means_[k,:]).T, dot(np.diag(self.zs[:,k]), self.x-self.means_[k,:]))
-            S_k /= self.Ns[k]
-            S_k += np.eye(self.D)*self.reg_factor
+            x_reduce_mean = self.x-self.means_[k,:]
+            #S_k = dot(x_reduce_mean.T, dot(np.diag(self.zs[:,k]), x_reduce_mean))
+            S_k = dot(np.multiply(x_reduce_mean.T, self.zs[:,k][None,:]), x_reduce_mean)/self.Ns[k] + np.eye(self.D)*self.reg_factor
             B_k = dot(self.Lambda_[k].T, inv(dot(self.Lambda_[k],self.Lambda_[k].T)+self.Psi_[k]))
             
             
@@ -202,7 +287,128 @@ class MFA(GMM):
             self.Psi_[k] = np.diag(np.diag(S_k - dot(self.Lambda_[k], dot(B_k,S_k)))) + np.eye(self.D)*self.reg_factor
             self.covariances_[k] = dot(self.Lambda_[k], self.Lambda_[k].T) + self.Psi_[k]
         
-from scipy.stats import multivariate_normal as mvn
+
+class MPPCA(GMM):
+    def __init__(self, D = 1, K = 2, n_fac = 1, reg_factor = 1e-6):
+        self.D = D #number of dimensions
+        self.K = K #number of mixture components
+        self.L = -np.inf #total log likelihood
+        self.weights_ = np.ones(K)/K
+        self.means_ = np.random.rand(K,D)
+        self.covariances_ = np.array([np.eye(D) for i in range(K)])
+        
+        self.Lambda_ = np.array([np.zeros((D,n_fac)) for i in range(K)])
+        self.Psi_ = np.array([np.eye(D) for i in range(K)])
+        self.sigma_ = np.ones(self.K)*1e-4
+        
+        self.n_fac = n_fac
+        self.reg_factor = reg_factor
+        
+
+            
+    def init_MPPCA(self):
+        for k in range(self.K):
+            self.sigma_[k] = np.trace(self.covariances_[k])/self.D
+            print self.sigma_[k]
+            D,V = np.linalg.eig(self.covariances_[k] - np.eye(self.D)*self.sigma_[k])
+            indexes = np.argsort(D)[::-1]
+            print D
+            V = dot(V[:,indexes], np.diag(np.lib.scimath.sqrt(D[indexes])))
+            self.Lambda_[k] = V[:,:self.n_fac]
+                       
+
+    def fit(self,x, max_iter = 10, init_type = 'kmeans', threshold = 1e-4, n_init = 5):
+        self.x = x
+        self.N = len(self.x) #number of datapoints
+        self.Ls = np.zeros((self.N,self.K)) #posterior probability of z
+        self.zs = np.zeros((self.N,self.K)) #posterior probability of z
+
+        self.threshold = threshold
+        
+        best_params = ()
+        Lmax = -np.inf
+
+        for it in range(n_init):
+            if init_type == 'kmeans':
+                self.init_kmeans()
+                print self.means_
+                print self.covariances_
+                print self.sigma_
+            elif init_type == 'random':
+                self.init_random()
+
+            self.init_MPPCA()
+            print self.sigma_
+                
+            for i in range(max_iter):
+                print 'Iteration ' + str(i)
+                
+                #tic = time.time()
+                self.expectation()
+                #toc = time.time()
+                #print 'Expectation computation', toc-tic
+            
+                #tic = time.time()
+                self.maximization_1()
+                #toc = time.time()
+                #print 'Maximization 1 computation', toc-tic
+
+                #self.expectation()
+                
+                #tic = time.time()
+                self.maximization_2()
+                #toc = time.time()
+                #print 'Maximization 2 computation', toc-tic
+
+                print self.L
+                if np.abs(self.prev_L-self.L) < self.threshold:
+                    break
+                    
+            if self.L > Lmax:
+                Lmax = self.L
+                best_params = (self.L, self.weights_.copy(), self.means_.copy(), self.covariances_.copy(), self.zs.copy(), self.Ns.copy())
+            
+        #return the best result
+        self.L = Lmax
+        self.weights_ = best_params[1]
+        self.means_ = best_params[2]
+        self.covariances_ = best_params[3]
+        self.zs = best_params[4]
+        self.Ns = best_params[5]
+        print 'Obtain best result with Log Likelihood: ' + str(self.L)
+
+    def maximization_1(self):
+        for k in range(self.K):
+            #update weight
+            self.weights_[k] = self.Ns[k]/self.N 
+            #update mean
+            self.means_[k,:] = np.dot(self.zs[:,k].T, self.x)/self.Ns[k]  
+
+    def maximization_2(self):
+        #update covariance
+        self.S = []
+        self.M = []
+
+        for k in range(self.K):
+            x_reduce_mean = self.x-self.means_[k,:]
+            #S_k = dot(x_reduce_mean.T, dot(np.diag(self.zs[:,k]), x_reduce_mean))
+            S_k = dot(np.multiply(x_reduce_mean.T, self.zs[:,k][None,:]), x_reduce_mean)/self.Ns[k] + np.eye(self.D)*self.reg_factor
+            M_k = dot(self.Lambda_[k].T,self.Lambda_[k]) + np.eye(self.n_fac)*self.sigma_[k]
+            
+            Lambda_k = dot(S_k,dot(self.Lambda_[k], inv(np.eye(self.n_fac)*self.sigma_[k] + \
+                                dot(inv(M_k),dot(self.Lambda_[k].T,dot(S_k, self.Lambda_[k]) )  ))))
+            self.S.append(S_k)
+            self.M.append(M_k)
+            
+            
+            self.sigma_[k] = np.trace(S_k-dot(S_k,dot(self.Lambda_[k],dot(inv(M_k),Lambda_k.T))))/self.D
+            self.Psi_[k] = np.eye(self.D)*self.sigma_[k]
+            
+            self.Lambda_[k] = Lambda_k.copy()
+            
+            self.covariances_[k] = dot(self.Lambda_[k], self.Lambda_[k].T) + self.Psi_[k]
+                   
+        
 class GMR():
     def __init__(self, GMM, n_in, n_out):
         self.GMM = GMM
