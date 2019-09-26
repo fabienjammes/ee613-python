@@ -54,9 +54,10 @@ model = init_GMM_kbins(Data, model, nbSamples);
 
 %Uniform initialization
 model.Trans = ones(model.nbStates,model.nbStates);
-model.Trans = model.Trans ./ repmat(sum(model.Trans,2),1,model.nbStates);
+model.Trans = model.Trans ./ repmat(sum(model.Trans,2),1,model.nbStates)
 model.StatesPriors = ones(model.nbStates,1);
-model.StatesPriors = model.StatesPriors / sum(model.StatesPriors);
+model.StatesPriors = model.StatesPriors / sum(model.StatesPriors)
+
 
 %Parameters refinement with EM
 model = EM_HMM(s, model);

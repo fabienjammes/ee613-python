@@ -82,9 +82,8 @@ for nbIter=1:nbMaxSteps
 		GAMMA_INIT = [GAMMA_INIT s(n).GAMMA(:,1)];
 		GAMMA_TRK = [GAMMA_TRK s(n).GAMMA(:,1:end-1)];
 		ZETA = cat(3,ZETA,s(n).ZETA);
-	end
+	end 
 	GAMMA2 = GAMMA ./ repmat(sum(GAMMA,2)+realmin, 1, size(GAMMA,2));
-	
 	%M-step
 	for i=1:model.nbStates
 		

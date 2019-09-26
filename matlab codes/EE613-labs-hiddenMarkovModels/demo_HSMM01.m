@@ -84,6 +84,7 @@ for t=1:length(hmax)
 end
 st(currState).d = [st(currState).d cnt];
 
+st(1).d
 %Compute state duration as Gaussian distribution (optional)
 for i=1:model.nbStates
 	model.Mu_Pd(1,i) = mean(st(i).d);
