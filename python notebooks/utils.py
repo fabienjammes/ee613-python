@@ -528,8 +528,14 @@ def plot_data_2D(x, y_true, y_pred, colors = ['r', 'k', 'b'], title = 'Linear re
 
 def plot_GMM(mus, sigmas, ax, colors = None, alphas = None, labels = None):
     n = len(mus)
+    if colors is None:
+        colors = [0.7,0.7,0.7]*n
+        
     for i in range(n):
-        plot_gaussian_2D(mus[i], sigmas[i], ax)
+        if labels is None:
+            plot_gaussian_2D(mus[i], sigmas[i], ax, color=colors[i])
+        else:
+            plot_gaussian_2D(mus[i], sigmas[i], ax,label=labels[i],color=colors[i])
     return
 
 import matplotlib.pyplot as plt 
