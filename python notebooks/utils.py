@@ -96,6 +96,48 @@ class GMM():
             sigma_k = dot(np.multiply(x_reduce_mean.T, self.zs[:,k][None,:]), x_reduce_mean)/self.Ns[k] + np.eye(self.D)*self.reg_factor
             
             self.covariances_[k,:] = sigma_k        
+            
+    def get_marginal(self,dim,dim_out=None):
+        if dim_out is not None:
+            means_, covariances_ = (self.means_[:,dim],self.covariances_[:,dim,dim_out])
+        else:
+            means_, covariances_ = (self.means_[:,dim],self.covariances_[:,dim,dim])
+        return means_,covariances_
+    
+    def condition(self,x_in,dim_in,dim_out,h=None, return_gmm = False):
+        mu_in, sigma_in = self.get_marginal(dim_in)
+        mu_out, sigma_out = self.get_marginal(dim_out)
+        _, sigma_in_out = self.get_marginal(dim=dim_in, dim_out = dim_out)
+        
+        if h is None:
+            h = np.zeros(self.K)
+            for k in range(self.K):
+                h[k] = self.weights_[k]*mvn(mean=mu_in[k],cov=sigma_in[k]).pdf(x_in)
+            h = h/np.sum(h) 
+        
+        #compute mu and sigma
+        mu = []
+        sigma = []
+        for k in range(self.K):
+            mu += [mu_out[k] + np.dot(sigma_in_out[k].T, np.dot(np.linalg.inv(sigma_in[k]), x_in-mu_in[k]))]
+            sigma += [sigma_out[k] - np.dot(sigma_in_out[k].T, np.dot(np.linalg.inv(sigma_in[k]), sigma_in_out[k]))]
+            
+        mu,sigma = (np.asarray(mu),np.asarray(sigma))
+        if return_gmm:
+            return h,mu,sigma
+        else:
+            return self.moment_matching(h,mu,sigma)
+        
+    def moment_matching(self,h,mu,sigma):
+        dim = mu.shape[1]
+        sigma_out = np.zeros((dim, dim))
+        mu_out = np.zeros(dim)
+        for k in range(self.K):
+            sigma_out += h[k]*(sigma[k] + np.outer(mu[k],mu[k]))
+            mu_out += h[k]*mu[k]
+            
+        sigma_out -= np.outer(mu_out, mu_out)
+        return mu_out,sigma_out
         
     def plot(self):
         fig,ax = plt.subplots()
@@ -529,7 +571,7 @@ def plot_data_2D(x, y_true, y_pred, colors = ['r', 'k', 'b'], title = 'Linear re
 def plot_GMM(mus, sigmas, ax, colors = None, alphas = None, labels = None):
     n = len(mus)
     if colors is None:
-        colors = [0.7,0.7,0.7]*n
+        colors = [[0.7,0.7,0.7]]*n
         
     for i in range(n):
         if labels is None:
