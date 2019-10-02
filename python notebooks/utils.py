@@ -119,7 +119,7 @@ class GMM():
         mu = []
         sigma = []
         for k in range(self.K):
-            mu += [mu_out[k] + np.dot(sigma_in_out[k].T, np.dot(np.linalg.inv(sigma_in[k]), x_in-mu_in[k]))]
+            mu += [mu_out[k] + np.dot(sigma_in_out[k].T, np.dot(np.linalg.inv(sigma_in[k]), (x_in-mu_in[k]).T)).flatten()]
             sigma += [sigma_out[k] - np.dot(sigma_in_out[k].T, np.dot(np.linalg.inv(sigma_in[k]), sigma_in_out[k]))]
             
         mu,sigma = (np.asarray(mu),np.asarray(sigma))
