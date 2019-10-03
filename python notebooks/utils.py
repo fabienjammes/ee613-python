@@ -5,6 +5,8 @@ import numpy as np
 
 from sklearn.cluster import KMeans
 from scipy.stats import multivariate_normal as mvn
+from scipy.stats import norm as normal_dist
+
 
 from numpy import dot
 from numpy.linalg import inv
