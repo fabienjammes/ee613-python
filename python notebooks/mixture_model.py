@@ -48,10 +48,10 @@ class GMM():
                 self.init_random()
 
             for i in range(max_iter):
-                print 'Iteration ' + str(i)
+                print('Iteration {}'.format(i))
                 self.expectation()
                 self.maximization()
-                print self.L
+                print(self.L)
                 if np.abs(self.prev_L-self.L) < self.threshold:
                     break
                     
@@ -66,7 +66,7 @@ class GMM():
         self.covariances_ = best_params[3]
         self.zs = best_params[4]
         self.Ns = best_params[5]
-        print 'Obtain best result with Log Likelihood: ' + str(self.L)
+        print('Obtain best result with Log Likelihood: {}'.format(self.L))
         
     def expectation(self):
         for k in range(self.K):
@@ -269,7 +269,7 @@ class MFA(GMM):
             self.init_MFA()
                 
             for i in range(max_iter):
-                print 'Iteration ' + str(i)
+                print('Iteration {}'.format(i))
                 
                 tic = time.time()
                 self.expectation()
@@ -288,7 +288,7 @@ class MFA(GMM):
                 toc = time.time()
                 #print 'Maximization 2 computation', toc-tic
 
-                print self.L
+                print(self.L)
                 if np.abs(self.prev_L-self.L) < self.threshold:
                     break
                     
@@ -303,7 +303,7 @@ class MFA(GMM):
         self.covariances_ = best_params[3]
         self.zs = best_params[4]
         self.Ns = best_params[5]
-        print 'Obtain best result with Log Likelihood: ' + str(self.L)
+        print('Obtain best result with Log Likelihood: ' + str(self.L))
 
     def maximization_1(self):
         for k in range(self.K):
@@ -347,10 +347,10 @@ class MPPCA(GMM):
     def init_MPPCA(self):
         for k in range(self.K):
             self.sigma_[k] = np.trace(self.covariances_[k])/self.D
-            print self.sigma_[k]
+            print(self.sigma_[k])
             D,V = np.linalg.eig(self.covariances_[k] - np.eye(self.D)*self.sigma_[k])
             indexes = np.argsort(D)[::-1]
-            print D
+            print(D)
             V = dot(V[:,indexes], np.diag(np.lib.scimath.sqrt(D[indexes])))
             self.Lambda_[k] = V[:,:self.n_fac]
                        
@@ -369,18 +369,17 @@ class MPPCA(GMM):
         for it in range(n_init):
             if init_type == 'kmeans':
                 self.init_kmeans()
-                print self.means_
-                print self.covariances_
-                print self.sigma_
+                print(self.means_)
+                print(self.covariances_)
+                print(self.sigma_)
             elif init_type == 'random':
                 self.init_random()
 
             self.init_MPPCA()
-            print self.sigma_
+            print(self.sigma_)
                 
             for i in range(max_iter):
-                print 'Iteration ' + str(i)
-                
+                print('Iteration {}'.format(i))                
                 #tic = time.time()
                 self.expectation()
                 #toc = time.time()
@@ -398,7 +397,7 @@ class MPPCA(GMM):
                 #toc = time.time()
                 #print 'Maximization 2 computation', toc-tic
 
-                print self.L
+                print(self.L)
                 if np.abs(self.prev_L-self.L) < self.threshold:
                     break
                     
@@ -413,7 +412,7 @@ class MPPCA(GMM):
         self.covariances_ = best_params[3]
         self.zs = best_params[4]
         self.Ns = best_params[5]
-        print 'Obtain best result with Log Likelihood: ' + str(self.L)
+        print('Obtain best result with Log Likelihood: {}'.format(self.L))
 
     def maximization_1(self):
         for k in range(self.K):
@@ -556,10 +555,10 @@ class HMM(GMM):
             self.init_HMM()
             
             for i in range(max_iter):
-                print 'Iteration ' + str(i)
+                print('Iteration {}'.format(i))
                 self.expectation()
                 self.maximization()
-                print self.L
+                print(self.L)
                 if np.abs(self.prev_L-self.L) < self.threshold:
                     break
                     
@@ -572,7 +571,7 @@ class HMM(GMM):
         self.weights_ = best_params[1]
         self.means_ = best_params[2]
         self.covariances_ = best_params[3]
-        print 'Obtain best result with Log Likelihood: ' + str(self.L)
+        print('Obtain best result with Log Likelihood: {}'.format(self.L))
         
 
     def compute_messages(self,x,obs_slice=None):
@@ -699,7 +698,7 @@ class HMM(GMM):
     
     def condition(self,x_in,dim_in,dim_out,h=None, return_gmm = False):
         _,alpha,_,_,_,_,_ =  self.compute_messages(x_in, dim_in)
-        print alpha.shape
+        print(alpha.shape)
         x_out = []
         for i,x in enumerate(x_in):
             pred,cov = GMM.condition(self,x[None,:],dim_in,dim_out,h=alpha[i],return_gmm=return_gmm)
