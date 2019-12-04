@@ -9,6 +9,8 @@ from numpy import dot
 from numpy.linalg import inv
 from numpy.linalg import pinv
 import time
+import matplotlib.pyplot as plt 
+
 
 def plot_gaussian_1D(mu, sigma, ax,offset = None, bound= None, color = [.4,.4,.4], alpha = 1., normalize = True, prior = None, label = 'label', orient = 'h'):
     n = 100
@@ -90,7 +92,6 @@ def plot_GMM(mus, sigmas, ax, colors = None, alphas = None, labels = None):
             plot_gaussian_2D(mus[i], sigmas[i], ax,label=labels[i],color=colors[i])
     return
 
-import matplotlib.pyplot as plt 
 
 def plot_with_covs_1D(x, y, cov, ax):
     y_low = y - 2*np.sqrt(cov)
@@ -104,3 +105,4 @@ def plot_with_covs_1D(x, y, cov, ax):
     ax.add_patch(poly)
     
     plt.plot(x,y,'-r')
+    
