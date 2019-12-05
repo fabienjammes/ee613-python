@@ -365,7 +365,6 @@ class HMM(GMM):
         _,alpha,_,_,_,_,_ =  self.compute_messages(x_in, dim_in)
         x_out = []
         for i,x in enumerate(x_in):
-            print alpha[i]
             pred,cov = super(HMM,self).condition(x[None,:],dim_in,dim_out,h=alpha[i],return_gmm=return_gmm)
             x_out += [pred]
         return np.asarray(x_out)
@@ -401,8 +400,10 @@ class HSMM(HMM):
         self.sigmas_pd_ = np.zeros(self.K)
         for k in range(self.K):
             self.means_pd_[k] = np.mean(self.state_durs[k])
-            self.sigmas_pd_[k] = np.var(self.state_durs[k])
-            
+            self.sigmas_pd_[k] = np.var(self.state_durs[k]) + self.reg_factor*np.eye(1)
+
+        self.opt_seqs = opt_seqs
+        
     def compute_forward_messages_HSMM(self,x, obs_slice = None):
         if obs_slice is not None:
             means_, covariances_ = self.get_marginal(obs_slice)
@@ -415,7 +416,7 @@ class HSMM(HMM):
         self.Pd = np.zeros((num_dur_max,self.K))
         for k in range(self.K):
             self.Pd[:,k] = mvn(mean=self.means_pd_[k], cov=self.sigmas_pd_[k]).pdf(np.arange(num_dur_max))
-            self.Pd[:,k] /= np.sum(self.Pd[:,k])
+            self.Pd[:,k] /= np.sum(self.Pd[:,k])+realmin
             
         #compute the observation likelihood
         B = np.zeros((self.N,self.K))
@@ -423,7 +424,7 @@ class HSMM(HMM):
             B[:,k] = mvn(mean = means_[k], cov=covariances_[k]).pdf(x)
         
             
-        h = np.zeros((self.N,self.K))
+        alpha = np.zeros((self.N,self.K))
         c = np.zeros(self.N)
         c[0] = 1.
         
@@ -432,24 +433,24 @@ class HSMM(HMM):
                 if t < num_dur_max:
                     #o_tmp = np.prod(c[:t+1]*mvn(mean = means_[k], cov=covariances_[k]).pdf(x[:t+1]))
                     o_tmp = np.prod(c[:t+1]*B[:t+1,k])
-                    h[t,k] = self.weights_[k]*self.Pd[t,k]*o_tmp
+                    alpha[t,k] = self.weights_[k]*self.Pd[t,k]*o_tmp
                 
                 for d in range(np.min([t,num_dur_max])):
                     #o_tmp = np.prod(c[t-d:t+1]*mvn(mean = means_[k], cov=covariances_[k]).pdf(x[t-d:t+1]))
                     o_tmp = np.prod(c[t-d:t+1]*B[t-d:t+1,k])
-                    h[t,k] += np.dot(h[t-d-1,:],self.Trans_[:,k])*self.Pd[d,k]*o_tmp
+                    alpha[t,k] += np.dot(alpha[t-d-1,:],self.Trans_[:,k])*self.Pd[d,k]*o_tmp
             if t < self.N-1:
-                c[t+1] = 1/np.sum(h[t,:])
+                c[t+1] = 1/(np.sum(alpha[t,:])+realmin)
             
-        h = h/np.sum(h,axis=1)[:,None]
+        alpha = alpha/np.sum(alpha,axis=1)[:,None]
         self.num_dur_max = num_dur_max
-        return h,c
+        return alpha,c
     
     def condition(self,x_in,dim_in,dim_out,h=None, return_gmm = False):
-        h,_ =  self.compute_forward_messages_HSMM(x_in, dim_in)
+        alpha,_ =  self.compute_forward_messages_HSMM(x_in, dim_in)
         x_out = []
         for i,x in enumerate(x_in):
-            pred,cov = super(HMM,self).condition(x[None,:],dim_in,dim_out,h=h[i],return_gmm=return_gmm)
+            pred,cov = super(HMM,self).condition(x[None,:],dim_in,dim_out,h=alpha[i],return_gmm=return_gmm)
             x_out += [pred]
         return np.asarray(x_out)
     
@@ -462,54 +463,47 @@ class HSMM(HMM):
             self.Trans_[k,:] /= np.sum(self.Trans_[k,:])
 
 class GMR():
-    def __init__(self, GMM, n_in, n_out):
-        self.GMM = GMM
-        self.n_in = n_in
-        self.n_out = n_out
-        #segment the gaussian components
+    def __init__(self, gmm, dim_in=slice(0,2), dim_out=slice(2,4)):
+        self.gmm = gmm
+        self.dim_in = dim_in
+        self.dim_out = dim_out
         self.mu_x = []
         self.mu_y = []
         self.sigma_xx = []
         self.sigma_yy = []
         self.sigma_xy = []
         self.sigma_xyx = []
-        for k in range(self.GMM.n_components):
-            self.mu_x.append(self.GMM.means_[k][0:self.n_in])        
-            self.mu_y.append(self.GMM.means_[k][self.n_in:])        
-            self.sigma_xx.append(self.GMM.covariances_[k][0:self.n_in, 0:self.n_in])        
-            self.sigma_yy.append(self.GMM.covariances_[k][self.n_in:, self.n_in:])        
-            self.sigma_xy.append(self.GMM.covariances_[k][0:self.n_in, self.n_in:])
-            self.sigma_xyx.append(np.dot(self.sigma_xy[k].T,np.linalg.inv(self.sigma_xx[k])))
-            
-        self.mu_x = np.array(self.mu_x)
-        self.mu_y = np.array(self.mu_y)
-        self.sigma_xx = np.array(self.sigma_xx)
-        self.sigma_yy = np.array(self.sigma_yy)
-        self.sigma_xy = np.array(self.sigma_xy)
-        self.sigma =[self.sigma_yy[k]- np.dot(self.sigma_xy[k].T, \
-            np.dot(np.linalg.inv(self.sigma_xx[k]), self.sigma_xy[k])) for k in range(self.GMM.n_components)]
         
-    def predict(self,x):
+        #separate the distributions into input(x) and output(y)
+        self.mu_x, self.sigma_xx = self.gmm.get_marginal(dim=self.dim_in)
+        self.mu_y, self.sigma_yy = self.gmm.get_marginal(dim=self.dim_out)
+        _, self.sigma_xy = self.gmm.get_marginal(dim=self.dim_in, dim_out=self.dim_out)
+                
+        for k in range(self.gmm.K):
+            self.sigma_xyx.append(np.dot(self.sigma_xy[k].T,np.linalg.inv(self.sigma_xx[k])))
+
+        #The output covariance does not depend on the input, so we can calculate it directly here
+        #to save online computation time
+        self.sigma =[self.sigma_yy[k]- np.dot(self.sigma_xy[k].T, \
+            np.dot(np.linalg.inv(self.sigma_xx[k]), self.sigma_xy[k])) for k in range(self.gmm.K)]
+        
+    def predict(self,x, return_gmm = False):
         h = []
         mu = []        
 
-        for k in range(self.GMM.n_components):
-            h.append(self.GMM.weights_[k]*mvn(mean = self.mu_x[k], cov = self.sigma_xx[k]).pdf(x))
+        for k in range(self.gmm.K):
+            h.append(self.gmm.weights_[k]*mvn(mean = self.mu_x[k], cov = self.sigma_xx[k]).pdf(x))
             mu.append(self.mu_y[k] + np.dot(self.sigma_xyx[k], x - self.mu_x[k]))
         
         h = np.array(h)
-        h = h/np.sum(h)
+        h /= np.sum(h)
         mu = np.array(mu)
         sigma = self.sigma
         
-        sigma_one = np.zeros([self.n_out, self.n_out])
-        mu_one = np.zeros(self.n_out)
-        for k in range(self.GMM.n_components):
-            sigma_one += h[k]*(sigma[k] + np.outer(mu[k],mu[k]))
-            mu_one += h[k]*mu[k]
-            
-        sigma_one -= np.outer(mu_one, mu_one)
-        return mu_one, sigma_one
+        if return_gmm:
+            return h,mu,sigma
+        else:
+            return self.gmm.moment_matching(h,mu,sigma)
         
 
 class HDGMM(GMM):
