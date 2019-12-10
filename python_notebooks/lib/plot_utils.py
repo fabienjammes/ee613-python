@@ -84,16 +84,23 @@ def plot_GMM(mus, sigmas, ax, colors = None, alphas = None, labels = None):
     n = len(mus)
     if colors is None:
         colors = [[0.7,0.7,0.7]]*n
+    if alphas is None:
+        alphas = [1.]*n
+    print alphas
         
     for i in range(n):
         if labels is None:
-            plot_gaussian_2D(mus[i], sigmas[i], ax, color=colors[i])
+            plot_gaussian_2D(mus[i], sigmas[i], ax, color=colors[i],alpha=alphas[i])
         else:
-            plot_gaussian_2D(mus[i], sigmas[i], ax,label=labels[i],color=colors[i])
+            plot_gaussian_2D(mus[i], sigmas[i], ax,label=labels[i],color=colors[i], alpha = alphas[i])
     return
 
 
 def plot_with_covs_1D(x, y, cov, ax):
+    """
+    Plot the graph of y against x, together with the covariance of y
+    """
+    
     y_low = y - 2*np.sqrt(cov)
     y_up = y + 2*np.sqrt(cov)
     y_up = y_up[::-1]
