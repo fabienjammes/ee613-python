@@ -86,7 +86,7 @@ def plot_GMM(mus, sigmas, ax, colors = None, alphas = None, labels = None):
         colors = [[0.7,0.7,0.7]]*n
     if alphas is None:
         alphas = [1.]*n
-    print alphas
+    print(alphas)
         
     for i in range(n):
         if labels is None:
